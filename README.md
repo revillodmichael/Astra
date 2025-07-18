@@ -120,6 +120,83 @@
   #socialNetwork, #bankingPanel {
     display: none; /* Caché par défaut */
   }
+
+  /* Styles pour NeuralLink */
+  #info {
+    margin: 10px;
+    font-size: 1.2rem;
+    text-shadow: 0 0 10px #0ff;
+    text-align: center;
+  }
+  #energyCanvas {
+    background: radial-gradient(circle at center, #001f3f 0%, #000 80%);
+    border-radius: 20px;
+    box-shadow: 0 0 30px #0ff;
+    display: block;
+    width: 600px;
+    height: 600px;
+  }
+  #chat {
+    margin-top: 10px;
+    width: 600px;
+    max-width: 90vw;
+    background: #111827;
+    border-radius: 10px;
+    padding: 10px;
+    box-shadow: 0 0 15px #0ff;
+    display: flex;
+    flex-direction: column;
+  }
+  #messages {
+    height: 200px;
+    overflow-y: auto;
+    padding: 10px;
+    font-size: 14px;
+    color: #eee;
+  }
+  #inputArea {
+    display: flex;
+    border-top: 1px solid #334155;
+  }
+  #inputArea input {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    font-size: 16px;
+    border-radius: 0 0 0 10px;
+    background: #1f2937;
+    color: white;
+  }
+  #inputArea button {
+    padding: 10px 20px;
+    background: #6366f1;
+    border: none;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 0 0 10px 0;
+    transition: background-color 0.3s;
+  }
+  #inputArea button:hover {
+    background-color: #4f46e5;
+  }
+  .message {
+    margin: 5px 0;
+    max-width: 80%;
+    word-wrap: break-word;
+  }
+  .message.self {
+    align-self: flex-end;
+    background: #6366f1;
+    padding: 6px 10px;
+    border-radius: 10px 10px 0 10px;
+  }
+  .message.other {
+    align-self: flex-start;
+    background: #0f172a;
+    padding: 6px 10px;
+    border-radius: 10px 10px 10px 0;
+  }
 </style>
 </head>
 <body>
@@ -234,198 +311,160 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/crypto-js.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+  // --- Simulation Champ Énergétique & Réseau ---
+  const canvas = document.getElementById('energyCanvas');
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+  const centerX = width / 2;
+  const centerY = height / 2;
+
+  const maxRadius = width * 0.45;
+  const waveCount = 6;
+  const waveSpeed = 0.015;
+
+  const nodeCount = 30;
+  let nodes = [];
+  for(let i=0; i<nodeCount; i++) {
+    const angle = Math.random() * 2 * Math.PI;
+    const radius = 80 + Math.random() * (maxRadius - 120);
+    nodes.push({
+      x: centerX + radius * Math.cos(angle),
+      y: centerY + radius * Math.sin(angle),
+      baseRadius: 4 + Math.random() * 2,
+      pulse: Math.random() * Math.PI * 2,
+      color: '#0ff',
+      reactiveRadius: 0
+    });
+  }
+
+  let time = 0;
+
+  function drawBackground() {
+    const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, maxRadius);
+    gradient.addColorStop(0, 'rgba(0,255,255,0.05)');
+    gradient.addColorStop(1, 'rgba(0,0,0,0.9)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+  }
+
+  function drawPlanetCore() {
+    const grad = ctx.createRadialGradient(centerX, centerY, 20, centerX, centerY, 100);
+    grad.addColorStop(0, '#0ff');
+    grad.addColorStop(1, 'transparent');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 60, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 20, 0, Math.PI * 2);
+    ctx.fillStyle = '#0ff';
+    ctx.shadowColor = '#0ff';
+    ctx.shadowBlur = 20;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  function drawWaves() {
+    for(let i=0; i<waveCount; i++) {
+      let progress = (time + i / waveCount) % 1;
+      let radius = progress * maxRadius;
+      let alpha = 1 - progress;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(0, 255, 255, ${alpha * 0.3})`;
+      ctx.lineWidth = 2;
+      ctx.shadowColor = 'cyan';
+      ctx.shadowBlur = 15;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Perturbation detection
+      nodes.forEach(node => {
+        const dist = Math.hypot(node.x - centerX, node.y - centerY);
+        const waveThickness = 10;
+        if (Math.abs(dist - radius) < waveThickness) {
+          node.reactiveRadius = 10;
+          node.color = '#ff3300';
+        }
+      });
+    }
+  }
+
+  function drawNodes() {
+    nodes.forEach(node => {
+      if (node.reactiveRadius > 0) {
+        node.reactiveRadius -= 0.3;
+        if (node.reactiveRadius < 0) node.reactiveRadius = 0;
+      } else {
+        node.color = '#0ff';
+      }
+
+      const pulse = (Math.sin(time * 5 + node.pulse) + 1) / 2;
+      const radius = node.baseRadius + pulse * 2 + node.reactiveRadius;
+
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = node.color;
+      ctx.shadowColor = node.color;
+      ctx.shadowBlur = 10;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    });
+  }
+
+  // --- IA simulée pour ajuster les nœuds ---
+  function simulateAIAdjustments() {
+    nodes.forEach(node => {
+      node.newRadius = node.baseRadius * (1 + 0.3 * Math.sin(time * 2 + node.pulse));
+    });
+  }
+
+  function animate() {
+    ctx.clearRect(0, 0, width, height);
+    drawBackground();
+    drawPlanetCore();
+    drawWaves();
+    drawNodes();
+    simulateAIAdjustments();
+    time += waveSpeed;
+    requestAnimationFrame(animate);
+  }
+
+  animate();
+
+  // --- Chat simple avec chiffrement simulé ---
+  const messagesDiv = document.getElementById('messages');
+  const input = document.getElementById('messageInput');
+  const sendBtn = document.getElementById('sendBtn');
+
+  function addMessage(text, self = false) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    div.className = 'message ' + (self ? 'self' : 'other');
+    messagesDiv.appendChild(div);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  }
+
+  sendBtn.addEventListener('click', () => {
+    const text = input.value.trim();
+    if (!text) return;
+    addMessage("Vous : " + text, true);
+    input.value = '';
+
+    // Simulation chiffrement (simple inversion)
+    const encrypted = text.split('').reverse().join('');
+    setTimeout(() => {
+      const decrypted = encrypted.split('').reverse().join('');
+      addMessage("NeuralLink IA : " + decrypted, false);
+    }, 500);
+  });
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendBtn.click();
+  });
+
   // Instance blockchain simulée
   const blockchain = {
-    energyModulation: 0.5,
-    nodes: [
-      {id: 'node1', power: 800},
-      {id: 'node2', power: 900},
-      {id: 'node3', power: 750}
-    ],
-    calculateNodeEfficiency(node) {
-      return Math.min(1, node.power / 1000 * this.energyModulation);
-    },
-    calculateAvgEfficiency() {
-      if (this.nodes.length === 0) return 0;
-      let total = 0;
-      for (const node of this.nodes) {
-        total += this.calculateNodeEfficiency(node);
-      }
-      return total / this.nodes.length;
-    }
-  };
-
-  const galaxieAstra = { blockchain };
-
-  // Dashboard AI
-  const aiLogsDiv = document.getElementById('aiLogs');
-  const ctx = document.getElementById('aiChart').getContext('2d');
-
-  let efficiencyData = [];
-  let timeLabels = [];
-
-  function logAI(message) {
-    const time = new Date().toLocaleTimeString();
-    const line = document.createElement('div');
-    line.textContent = `[${time}] ${message}`;
-    aiLogsDiv.appendChild(line);
-    aiLogsDiv.scrollTop = aiLogsDiv.scrollHeight;
-  }
-
-  const aiChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: timeLabels,
-      datasets: [{
-        label: 'Efficacité Réseau (%)',
-        data: efficiencyData,
-        borderColor: '#0ea5e9',
-        backgroundColor: 'rgba(14, 165, 233, 0.3)',
-        fill: true,
-        tension: 0.3,
-        pointRadius: 3,
-        pointHoverRadius: 6,
-      }]
-    },
-    options: {
-      responsive: false,
-      scales: {
-        y: {
-          min: 0,
-          max: 100,
-          ticks: { color: '#0ff' },
-          grid: { color: '#0ff33', borderDash: [5,5] }
-        },
-        x: {
-          ticks: { color: '#0ff' },
-          grid: { color: '#0ff33', borderDash: [5,5] }
-        }
-      },
-      plugins: {
-        legend: { labels: { color: '#0ff' } }
-      }
-    }
-  });
-
-  // Planète interactive
-  const planet = document.getElementById('planet');
-  const radialMenu = document.getElementById('radialMenu');
-
-  // Toggle menu radial
-  planet.addEventListener('click', () => {
-    if (radialMenu.style.display === 'flex') {
-      radialMenu.style.display = 'none';
-      planet.style.transform = 'scale(1)';
-    } else {
-      radialMenu.style.display = 'flex';
-      planet.style.transform = 'scale(1.1) rotate(15deg)';
-    }
-  });
-
-  // Fermer menu si clic en dehors
-  document.addEventListener('click', (e) => {
-    if (!planet.contains(e.target) && !radialMenu.contains(e.target)) {
-      radialMenu.style.display = 'none';
-      planet.style.transform = 'scale(1)';
-    }
-  });
-
-  // Fonctions pour toggle sections
-  function toggleDisplay(id) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    if (el.style.display === 'none' || el.style.display === '') {
-      el.style.display = (id === 'chat' || id === 'socialNetwork') ? 'flex' : 'block';
-    } else {
-      el.style.display = 'none';
-    }
-  }
-
-  document.getElementById('toggleChat').addEventListener('click', () => {
-    toggleDisplay('chat');
-    radialMenu.style.display = 'none';
-    planet.style.transform = 'scale(1)';
-  });
-  document.getElementById('toggleBanking').addEventListener('click', () => {
-    toggleDisplay('bankingPanel');
-    radialMenu.style.display = 'none';
-    planet.style.transform = 'scale(1)';
-  });
-  document.getElementById('toggleSocial').addEventListener('click', () => {
-    toggleDisplay('socialNetwork');
-    radialMenu.style.display = 'none';
-    planet.style.transform = 'scale(1)';
-  });
-  document.getElementById('toggleAiDashboard').addEventListener('click', () => {
-    toggleDisplay('aiDashboard');
-    radialMenu.style.display = 'none';
-    planet.style.transform = 'scale(1)';
-  });
-
-  // Champ Énergétique Planétaire
-  (function(){
-    const energyCanvas = document.getElementById('energyFieldCanvas');
-    const energyCtx = energyCanvas.getContext('2d');
-    const energyCenterX = energyCanvas.width / 2;
-    const energyCenterY = energyCanvas.height / 2;
-
-    function drawPlanet(x, y, radius, color, glowColor) {
-      energyCtx.beginPath();
-      energyCtx.arc(x, y, radius, 0, 2 * Math.PI);
-      energyCtx.fillStyle = color;
-      energyCtx.shadowColor = glowColor;
-      energyCtx.shadowBlur = 20;
-      energyCtx.fill();
-      energyCtx.shadowBlur = 0;
-    }
-
-    function drawEnergyField(time) {
-      energyCtx.clearRect(0, 0, energyCanvas.width, energyCanvas.height);
-
-      // Planète centrale
-      drawPlanet(energyCenterX, energyCenterY, 80, '#0ea5e9', '#22d3ee');
-
-      // Orbites et planètes satellites animées
-      const orbitCount = 4;
-      for (let i = 1; i <= orbitCount; i++) {
-        const orbitRadius = 120 + i * 50;
-        energyCtx.beginPath();
-        energyCtx.strokeStyle = `rgba(14, 165, 233, 0.2)`;
-        energyCtx.lineWidth = 1;
-        energyCtx.setLineDash([5, 10]);
-        energyCtx.arc(energyCenterX, energyCenterY, orbitRadius, 0, 2 * Math.PI);
-        energyCtx.stroke();
-        energyCtx.setLineDash([]);
-
-        // Planète en orbite animée
-        const angle = (time * 0.001 * (0.5 + i * 0.2)) % (2 * Math.PI);
-        const planetX = energyCenterX + orbitRadius * Math.cos(angle);
-        const planetY = energyCenterY + orbitRadius * Math.sin(angle);
-        drawPlanet(planetX, planetY, 15, '#22d3ee', '#3b82f6');
-      }
-
-      // Pulsation d'énergie autour de la planète centrale
-      const pulseRadius = 90 + 10 * Math.sin(time * 0.005);
-      energyCtx.beginPath();
-      energyCtx.arc(energyCenterX, energyCenterY, pulseRadius, 0, 2 * Math.PI);
-      energyCtx.strokeStyle = 'rgba(14, 165, 233, 0.4)';
-      energyCtx.lineWidth = 4;
-      energyCtx.shadowColor = '#0ea5e9';
-      energyCtx.shadowBlur = 15;
-      energyCtx.stroke();
-      energyCtx.shadowBlur = 0;
-    }
-
-    function animateEnergyField() {
-      const time = Date.now();
-      drawEnergyField(time);
-      requestAnimationFrame(animateEnergyField);
-    }
-
-    animateEnergyField();
-  })();
-</script>
-
-</body>
-</html>
-# Astra
+    energyMod
